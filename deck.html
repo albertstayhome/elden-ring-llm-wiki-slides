@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>《艾爾登法環》戰鬥底層機制全解析｜LLM Wiki 教學簡報</title>
+  <style>
+    :root {
+      --bg-dark: #0b0e14;
+      --bg-card: #131924;
+      --bg-panel: #1a2232;
+      --gold: #d4af37;
+      --gold-soft: rgba(212, 175, 55, 0.18);
+      --cyan: #38bdf8;
+      --cyan-soft: rgba(56, 189, 248, 0.15);
+      --emerald: #34d399;
+      --rose: #fb7185;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: rgba(212, 175, 55, 0.28);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: radial-gradient(circle at 15% 15%, #172033 0%, #090c12 70%);
+      color: var(--text-main);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    /* Top Navigation Bar */
+    .topbar {
+      height: 54px;
+      background: rgba(11, 14, 20, 0.92);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      flex-shrink: 0;
+      z-index: 20;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      color: var(--gold);
+      font-size: 0.96rem;
+      letter-spacing: 0.5px;
+    }
+    .brand-badge {
+      background: var(--gold-soft);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      padding: 2px 9px;
+      border-radius: 99px;
+      font-size: 0.75rem;
+      font-family: Consolas, monospace;
+    }
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .nav-link, .ctrl-btn {
+      background: var(--bg-panel);
+      color: var(--text-main);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      padding: 6px 13px;
+      border-radius: 6px;
+      font-size: 0.84rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.18s;
+    }
+    .nav-link:hover, .ctrl-btn:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+    /* Progress Bar */
+    .progress-track {
+      height: 4px;
+      background: rgba(255,255,255,0.07);
+      width: 100%;
+      flex-shrink: 0;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--gold), var(--cyan));
+      width: 8.33%;
+      transition: width 0.25s ease;
+    }
+    /* Slide Stage */
+    .stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 36px;
+      overflow: hidden;
+      position: relative;
+    }
+    section.slide {
+      display: none;
+      width: 100%;
+      max-width: 1120px;
+      height: 100%;
+      max-height: 610px;
+      background: rgba(19, 25, 36, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px 38px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+    section.slide.active {
+      display: flex;
+      animation: fadeIn 0.24s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .slide-header {
+      border-bottom: 1px solid rgba(212, 175, 55, 0.22);
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .module-tag {
+      display: inline-block;
+      font-size: 0.76rem;
+      font-family: Consolas, monospace;
+      color: var(--cyan);
+      background: var(--cyan-soft);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      padding: 2px 10px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+    }
+    .slide-title {
+      font-size: 1.55rem;
+      color: #fff;
+      font-weight: 800;
+      line-height: 1.3;
+    }
+    .slide-num-pill {
+      font-family: Consolas, monospace;
+      font-size: 0.9rem;
+      color: var(--gold);
+      background: var(--gold-soft);
+      padding: 4px 12px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+    .slide-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 24px;
+      align-items: center;
+      overflow: hidden;
+    }
+    .slide-body.single-col {
+      grid-template-columns: 1fr;
+    }
+    ul.bullet-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+    }
+    ul.bullet-list li {
+      position: relative;
+      padding-left: 22px;
+      font-size: 0.98rem;
+      line-height: 1.55;
+      color: #e2e8f0;
+    }
+    ul.bullet-list li::before {
+      content: "◆";
+      position: absolute;
+      left: 0;
+      color: var(--gold);
+      font-size: 0.85rem;
+    }
+    .hl-gold { color: var(--gold); font-weight: 700; }
+    .hl-cyan { color: var(--cyan); font-weight: 700; }
+    .hl-rose { color: var(--rose); font-weight: 700; }
+    .hl-emerald { color: var(--emerald); font-weight: 700; }
+    code {
+      font-family: Consolas, monospace;
+      background: rgba(15, 23, 42, 0.85);
+      color: #fde68a;
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(212, 175, 55, 0.25);
+      font-size: 0.91em;
+    }
+    .visual-box {
+      background: var(--bg-panel);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 12px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .visual-title {
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: var(--gold);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding-bottom: 6px;
+    }
+    .mini-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.84rem;
+    }
+    .mini-table th, .mini-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      text-align: left;
+    }
+    .mini-table th { color: var(--cyan); font-weight: 700; }
+    .persona-note {
+      background: rgba(212, 175, 55, 0.09);
+      border-left: 3px solid var(--gold);
+      padding: 8px 12px;
+      font-size: 0.86rem;
+      color: #fef08a;
+      border-radius: 0 6px 6px 0;
+    }
+    .slide-footer {
+      border-top: 1px solid rgba(148, 163, 184, 0.16);
+      padding-top: 10px;
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .source-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .src-badge {
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      color: var(--cyan);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+      font-size: 0.76rem;
+      text-decoration: none;
+    }
+    .src-badge:hover { background: rgba(56, 189, 248, 0.25); }
+    .raw-badge {
+      background: rgba(212, 175, 55, 0.12);
+      border: 1px solid rgba(212, 175, 55, 0.35);
+      color: var(--gold);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+      font-size: 0.76rem;
+      text-decoration: none;
+    }
+    /* Bottom Controls */
+    .bottombar {
+      height: 48px;
+      background: rgba(11, 14, 20, 0.92);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    .frame-bar {
+      display: flex;
+      height: 22px;
+      border-radius: 6px;
+      overflow: hidden;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-align: center;
+      line-height: 22px;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-badge">LLM WIKI → HTML DECK</span>
+      <span>家豪的交界地戰術講堂｜《艾爾登法環》戰鬥底層機制全解析</span>
+    </div>
+    <div class="nav-actions">
+      <a class="nav-link" href="index.html">📚 返回專案主控台（Wiki 瀏覽器 ＆ Graph 報告）</a>
+      <button class="ctrl-btn" onclick="prevSlide()">◀ 上一頁 (←)</button>
+      <span id="pageIndicator" style="font-family:Consolas,monospace;color:var(--gold);font-weight:700;">01 / 12</span>
+      <button class="ctrl-btn" onclick="nextSlide()">下一頁 (→) ▶</button>
+    </div>
+  </header>
+
+  <div class="progress-track">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <main class="stage">
+
+    <!-- Slide 01 -->
+    <section class="slide active" data-slide="1">
+      <div class="slide-header">
+        <div>
+          <span class="module-tag">MODULE 00 // 破冰導言與痛點診斷</span>
+          <h1 class="slide-title">為什麼你在交界地總是「死得不明不白」？</h1>
+        </div>
+        <span class="slide-num-pill">SLIDE 01 / 12</span>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li>（推了一下黑口罩）新手常卡關不是因為手殘，而是沒人告訴你交界地的底層數學規則。</li>
+          <li>三大常見死法：負重超過 <code>70.0%</code> 變慢滾、只用 <code>100%</code> 倍率輕擊刮痧、待機喝水被讀指令。</li>
+          <li>本簡報萃取自 6 篇底層實測 Wiki 文獻，帶你從零建立高生存、高破防的戰鬥思維。</li>
+        </ul>
+        <div class="visual-box">
+          <div class="visual-title">🎧 家豪的終端機診斷面板</div>
+          <div class="persona-note">
+            「呵，聽著耳機裡的 Alan Walker 節拍，我把這套支配交界地的 60 FPS 逐幀公式全部調出來了。看懂這 12 頁，你也能從受苦褪色者進化成數據流黑客。」
+          </div>
+          <table class="mini-table">
+            <tr><th>新手常見挫折</th><th>對應底層真相</th></tr>
+            <tr><td>滾了還是被砍中</td><td>負重 ≥ <code>70.0%</code> 硬直暴增至 <code>16</code> 幀</td></tr>
+            <tr><td>喝水必吃火球/光刀</td><td>觸發 Boss <code>0.2</code> 秒（<code>12</code> 幀）讀指令懲罰</td></tr>
+            <tr><td>砍半天王都不跪</td><td>停手超過 <code>5.0</code> 秒導致失衡槽每秒扣 <code>13</code> 點</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="source-badges">
+          <span>知識庫溯源：</span>
+          <a class="src-badge" href="index.html#wiki-syn-01">[WIKI-SYN-01]</a>
+          <a class="raw-badge" href="index.html#raw-01">[RAW-01]</a>
+          <a class="raw-badge" href="index.html#raw-02">[RAW-02]</a>
+        </div>
+        <span>驗證狀態：✅ check_drafts.py &amp; check_slides.py PASS</span>
+      </div>
+    </section>
+
+    <!-- Slide 02 -->
+    <section class="slide" data-slide="2">
+      <div class="slide-header">
+        <div>
+          <span class="module-tag">MODULE 00 // 課程全景地圖</span>
+          <h2 class="slide-title">系統全景圖：支配交界地戰鬥的 6 大底層齒輪</h2>
+        </div>
+        <span class="slide-num-pill">SLIDE 02 / 12</span>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li>防守生存層：掌握 <code>13</code> 幀翻滾無敵幀、避開 <code>70.0%</code> 重負荷紅線，識破 Boss <code>0.2</code> 秒讀指令。</li>
+          <li>進攻破防層：看穿 Boss 隱藏的 <code>80</code> / <code>120</code> / <code>150</code> 點失衡槽，用飛刀重置 <code>5.0</code> 秒計時。</li>
+          <li>傷害與配裝層：突破雙層減傷門檻、活用凍傷 <code>+20%</code> 增傷與 5 大 Buff 桶相乘（<code>+58.7%</code>）。</li>
+        </ul>
+        <div class="visual-box">
+          <div class="visual-title">🗺️ 四階段教學架構（對應 6 篇 Wiki 概念頁）</div>
+          <table class="mini-table">
+            <tr><th>教學階段</th><th>核心概念頁</th><th>簡報頁碼</th></tr>
+            <tr><td>① 防守生存</td><td><code>[WIKI-02]</code> 無敵幀、<code>[WIKI-05]</code> 讀指令</td><td>Slide 03–05</td></tr>
+            <tr><td>② 進攻破防</td><td><code>[WIKI-01]</code> 失衡值與玩家 <code>51</code> 韌性</td><td>Slide 06–07</td></tr>
+            <tr><td>③ 傷害數學</td><td><code>[WIKI-04]</code> 動作倍率、<code>[WIKI-03]</code> 異常狀態</td><td>Slide 08–10</td></tr>
+            <tr><td>④ 配裝與總結</td><td><code>[WIKI-06]</code> 5 大 Buff 桶、<code>[WIKI-SYN-01]</code></td><td>Slide 11–12</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="source-badges">
+          <span>知識庫溯源：</span>
+          <a class="src-badge" href="index.html#wiki-01">[WIKI-01]</a>
+          <a class="src-badge" href="index.html#wiki-02">[WIKI-02]</a>
+          <a class="src-badge" href="index.html#wiki-03">[WIKI-03]</a>
+          <a class="src-badge" href="index.html#wiki-04">[WIKI-04]</a>
+          <a class="src-badge" href="index.html#wiki-05">[WIKI-05]</a>
+          <a class="src-badge" href="index.html#wiki-06">[WIKI-06]</a>
+          <a class="raw-badge" href="index.html#raw-01">[RAW-01~06]</a>
+        </div>
+        <span>100% 覆蓋 6 篇 Ingest 原始文獻</span>
+      </div>
+    </section>
+
+    <!-- Slide 03 -->
+    <section class="slide" data-slide="3">
+      <div class="slide-header">
+        <div>
+          <span class="module-tag">MODULE 01 // 防守生存篇 ①</span>
+          <h2 class="slide-title">翻滾不是逃跑，而是開啟 13 幀無敵護盾</h2>
+        </div>
+        <span class="slide-num-pill">SLIDE 03 / 12</span>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li>白話比喻：翻滾不是為了「跳出刀刃範圍」，而是開啟短暫的「幽靈穿透防護罩」。</li>
+          <li>在 <code>60</code> FPS 標準下，輕負荷與中負荷翻滾啟動瞬間皆擁有 <span class="hl-gold"><code>13</code> 幀無敵幀（約 <code>0.216</code> 秒）</span>。</li>
+          <li>只要敵人的刀刃在這 <code>13</code> 幀期間穿過你的身體，系統一律判定為 <span class="hl-gold"><code>0</code> 傷害</span>。</li>
+          <li>實戰口訣：不要往後退（易被刀尖掃到硬直），請「迎著刀刃往 Boss 身側滾過去」！</li>
+        </ul>
+        <div class="visual-box">
+          <div class="visual-title">⏱️ 60 FPS 中負荷翻滾逐幀時間軸（共 21 幀）</div>
+          <div>
+            <div style="font-size:0.8rem;margin-bottom:4px;color:var(--emerald);">標準翻滾（輕／中負荷）：無敵期佔比高達 61.9%</div>
+            <div class="frame-bar">
+              <div style="width:62%;background:#10b981;color:#052e16;">13 幀 無敵幀 (0.216s)</div>
+              <div style="width:38%;background:#475569;color:#f8fafc;">8 幀 硬直</div>
+            </div>
+          </div>
+          <div class="persona-note">
+            💡 為什麼「往後滾」最常死？因為 Boss 的長刀正往前延伸，當你 13 幀無敵結束進入後 8 幀硬直時，刀尖剛好追上你的身體！迎著刀刃滾過去才能讓刀身在無敵幀內離開你。
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="source-badges">
+          <span>知識庫溯源：</span>
+          <a class="src-badge" href="index.html#wiki-02">[WIKI-02]</a>
+          <span class="src-badge">[CARD-02]</span>
+          <a class="raw-badge" href="index.html#raw-02">[RAW-02 §2.1]</a>
+        </div>
+        <span>防守生存核心機制</span>
+      </div>
+    </section>
+
+    <!-- Slide 04 -->
+    <section class="slide" data-slide="4">
+      <div class="slide-header">
+        <div>
+          <span class="module-tag">MODULE 01 // 防守生存篇 ②</span>
+          <h2 class="slide-title">70% 負重紅線——別讓「重負荷慢滾」害死你</h2>
+        </div>
+        <span class="slide-num-pill">SLIDE 04 / 12</span>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li>輕負荷（<code>≤29.9%</code>）與中負荷（<code>30.0%~69.9%</code>）：皆為 <code>13</code> 幀無敵幀 + <code>8</code> 幀硬直（共 <code>21</code> 幀）。</li>
+          <li>重負荷紅線（<code>70.0%~99.9%</code>）：無敵幀降至 <code>12</code> 幀，落地硬直暴增至 <span class="hl-gold"><code>16</code> 幀</span>（共 <code>28</code> 幀）。</li>
+          <li>重負荷還會使耗精增加 <span class="hl-gold"><code>20%</code></span>、每秒回精減少 <code>9</code> 點（降 <code>20%</code>）；<code>≥100.0%</code> 為 <code>0</code> 幀。</li>
+          <li>戰技替代：「獵犬步伐」單次滑步擁有 <span class="hl-gold"><code>18</code> 幀無敵幀</span>與 <code>4</code> 幀硬直（消耗 <code>5</code> 點 FP）。</li>
+        </ul>
+        <div class="visual-box">
+          <div class="visual-title">⚖️ 四大負重區間與戰技無敵幀對照表</div>
+          <table class="mini-table">
+            <tr><th>等級</th><th>負重比率</th><th>無敵幀</th><th>硬直幀</th><th>特殊影響</th></tr>
+            <tr><td>輕負荷</td><td><code>≤ 29.9%</code></td><td class="hl-emerald">13 幀</td><td>8 幀</td><td>滾距 +15%</td></tr>
+            <tr><td>中負荷</td><td><code>30.0%~69.9%</code></td><td class="hl-emerald">13 幀</td><td>8 幀</td><td>最佳黃金區間</td></tr>
+            <tr><td>重負荷</td><td><code>70.0%~99.9%</code></td><td class="hl-rose">12 幀</td><td class="hl-rose">16 幀</td><td>耗精+20% / 回精-20%</td></tr>
+            <tr><td>超重</td><td><code>≥ 100.0%</code></td><td>0 幀</td><td>無法滾</td><td>禁止奔跑跳躍</td></tr>
+            <tr><td>獵犬步伐</td><td>戰技 (5 FP)</td><td class="hl-cyan">18 幀</td><td>4 幀</td><td>連按會遞減</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="source-badges">
+          <span>知識庫溯源：</span>
+          <a class="src-badge" href="index.html#wiki-02">[WIKI-02]</a>
+          <span class="src-badge">[CARD-02]</span>
+          <a class="raw-badge" href="index.html#raw-02">[RAW-02 §2.2, §2.3]</a>
+        </div>
+        <span>70.0% 為絕對不可跨越的配裝紅線</span>
+      </div>
+    </section>
+
+    <!-- Slide 05 -->
+    <section class="slide" data-slide="5">
+      <div class="slide-header">
+        <div>
+          <span class="module-tag">MODULE 01 // 防守生存篇 ③</span>
+          <h2 class="slide-title">破解 Boss「0.2 秒讀指令」的安全喝水法則</h2>
+        </div>
+        <span class="slide-num-pill">SLIDE 05 / 12</span>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li>為什麼一按喝水就被丟火球？因為 Boss AI 監聽你進入喝水動畫的第 <span class="hl-gold"><code>1</code> 幀</span>！</li>
+          <li>當距離 <code>8~20</code> 公尺且 Boss 處於中立待機時，AI 會在 <span class="hl-gold"><code>0.2</code> 秒（<code>12</code> 幀）</span>內發動遠程懲罰。</li>
+          <li>玩家喝紅水動畫長達 <span class="hl-gold"><code>52</code> 幀（<code>0.87</code> 秒）</span>，待機時直接喝水必吃傷害。</li>
+          <li>破解鐵律：把喝水當成重攻擊！等 Boss 連段結束的 <span class="hl-gold"><code>1.5~2.5</code> 秒收招硬直</span>再安全喝水。</li>
+        </ul>
+        <div class="visual-box">
+          <div class="visual-title">🤖 Boss AI 讀指令觸發流程 vs. 回合制破解</div>
+          <table class="mini-table">
+            <tr><th>情境</th><th>Boss 當前狀態</th><th>AI 反應與結果</th></tr>
+            <tr><td class="hl-rose">❌ 錯誤喝水</td><td>中立待機 (距離 <code>8~20m</code>)</td><td><code>0.2s (12幀)</code> 內丟光刀/火球，喝水(<code>52幀</code>)被打臉</td></tr>
+            <tr><td class="hl-emerald">✅ 正確喝水</td><td>連段後收招 (<code>1.5~2.5s</code> 硬直)</td><td>Boss 卡在收刀動畫無法反擊，<code>0.87s</code> 滿血恢復</td></tr>
+          </table>
+          <div class="persona-note">
+            「記住家豪這句話：在交界地，『喝水』不是防守動作，而是跟蓄力重擊一樣消耗整整一個回合的『出招動作』！」
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="source-badges">
+          <span>知識庫溯源：</span>
+          <a class="src-badge" href="index.html#wiki-05">[WIKI-05]</a>
+          <span class="src-badge">[CARD-05]</span>
+          <a class="raw-badge" href="index.html#raw-05">[RAW-05 §5.1, §5.2]</a>
+        </div>
+        <span>實戰技巧：等 Boss 打完連段進入收招硬直再喝水</span>
+      </div>
+    </section>
+
+    <!-- Slide 06 -->
+    <section class="slide" data-slide="6">
+      <div class="slide-header">
+        <div>
+          <span class="module-tag">MODULE 02 // 進攻破防篇 ①</span>
+          <h2 class="slide-title">看不見的第二條血條——失衡值（Stance）</h2>
+        </div>
+        <span class="slide-num-pill">SLIDE 06 / 12</span>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li>白話比喻：每個 Boss 都有看不見的「暈眩條（失衡槽）」，打滿就會跪地讓你致命處決。</li>
+          <li>Boss 失衡上限：瑪爾基特／瑪蓮妮亞／黑劍 <span class="hl-gold"><code>80</code> 點</span>；拉塔恩 <span class="hl-gold"><code>120</code> 點</span>；艾爾登之獸 <span class="hl-gold"><code>150</code> 點</span>。</li>
+          <li>高削韌招式：特大武蓄力重擊 <span class="hl-gold"><code>36~40</code> 點</span>、獅子斬 <span class="hl-gold"><code>36</code> 點</span>、岩石球 <span class="hl-gold"><code>33</code> 點</span>、月隱重擊 <span class="hl-gold"><code>30</code> 點</span>。</li>
+          <li>連續 <code>3</code> 發獅子斬（<code>36×3=108</code> 點），連 <code>80</code> 點失衡的女武神都得當場跪下！</li>
+        </ul>
+        <div class="visual-box">
+          <div class="visual-title">🔨 主流招式單發削韌值 vs. 80 點 Boss 破防次數</div>
+          <table class="mini-table">
+            <tr><th>招式名稱</th><th>單發失衡傷害</th><th>打跪 80 點 Boss 次數</th></tr>
+            <tr><td>特大武器雙手蓄力重擊</td><td class="hl-gold"><code>36 ~ 40</code> 點</td><td>僅需 <strong>2 ~ 3 下</strong></td></tr>
+            <tr><td>戰技「獅子斬」</td><td class="hl-gold"><code>36</code> 點</td><td>僅需 <strong>3 下</strong> (108 點)</td></tr>
+            <tr><td>魔法「岩石球」三顆全中</td><td class="hl-cyan"><code>33</code> 點</td><td>僅需 <strong>3 發</strong> (99 點)</td></tr>
+            <tr><td>名刀月隱「瞬時月影」重擊</td><td class="hl-cyan"><code>30</code> 點</td><td>僅需 <strong>3 發</strong> (90 點)</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="source-badges">
+          <span>知識庫溯源：</span>
+          <a class="src-badge" href="index.html#wiki-01">[WIKI-01]</a>
+          <span class="src-badge">[CARD-01]</span>
+          <a class="raw-badge" href="index.html#raw-01">[RAW-01 §1.1, §1.3]</a>
+        </div>
+        <span>進攻破防核心數據</span>
+      </div>
+    </section>
+
+    <!-- Slide 07 -->
+    <section class="slide" data-slide="7">
+      <div class="slide-header">
+        <div>
+          <span class="module-tag">MODULE 02 // 進攻破防篇 ②</span>
+          <h2 class="slide-title">5 秒歸零倒數與「1 點失衡飛刀」續命術</h2>
+        </div>
+        <span class="slide-num-pill">SLIDE 07 / 12</span>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li><code>80</code> 點失衡的 Boss 只要 <span class="hl-gold"><code>5.0</code> 秒</span>未受擊（<code>120</code> 點為 <code>6.0</code> 秒），失衡值每秒倒扣 <span class="hl-gold"><code>13</code> 點</span>歸零！</li>
+          <li>黑客秘技：Boss 後跳拉開時，丟 <code>1</code> 發「飛刀」造成 <span class="hl-gold"><code>1</code> 點失衡</span>，即可重置 <code>5.0</code> 秒倒數計時！</li>
+          <li>玩家韌性（Patch 1.10+）：湊滿 <span class="hl-gold"><code>51</code> 點韌性</span>可扛單發普通輕擊不硬直；<span class="hl-gold"><code>101</code> 點</span>可扛單發重擊。</li>
+        </ul>
+        <div class="visual-box">
+          <div class="visual-title">🗡️ 飛刀續命計時器 &amp; 版本矛盾裁決紀錄</div>
+          <div class="persona-note">
+            ⚡ <strong>實戰情境</strong>：你已經打了女武神 <code>72 / 80</code> 點失衡，這時她突然跳開對峙 6 秒——如果不丟飛刀，失衡值直接歸零白打；隨手賞她一發飛刀（<code>+1</code> 點），計時器重新回到 5.0 秒，下一刀直接跪地！
+          </div>
+          <table class="mini-table">
+            <tr><th>玩家韌性門檻 (Patch 1.10+)</th><th>實戰抗硬直效果</th></tr>
+            <tr><td><strong><code>51</code> 點韌性</strong>（PvE 必備線）</td><td>硬扛小怪與 Boss 單發輕攻擊不中斷出招</td></tr>
+            <tr><td><strong><code>101</code> 點韌性</strong>（重裝坦克線）</td><td>硬扛兩發輕攻擊或單發重擊不硬直</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="source-badges">
+          <span>知識庫溯源：</span>
+          <a class="src-badge" href="index.html#wiki-01">[WIKI-01]</a>
+          <span class="src-badge">[CARD-01]</span>
+          <a class="raw-badge" href="index.html#raw-01">[RAW-01 §1.2, §1.3]</a>
+        </div>
+        <span>包含 Patch 1.07 vs 1.10+ 版本矛盾裁決</span>
+      </div>
+    </section>
+
+    <!-- Slide 08 -->
+    <section class="slide" data-slide="8">
+      <div class="slide-header">
+        <div>
+          <span class="module-tag">MODULE 03 // 傷害數學篇 ①</span>
+          <h2 class="slide-title">面板 700 輸給 550？雙層減傷與複合屬性懲罰</h2>
+        </div>
+        <span class="slide-num-pill">SLIDE 08 / 12</span>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li>新手常以為雙屬性面板 <code>700</code>（物理 <code>350</code>+魔力 <code>350</code>）必贏純物理 <code>550</code>，實測卻相反。</li>
+          <li>第一層「固定防禦力（後期 Boss 約 <code>120</code>）」會對<span class="hl-gold">每一種屬性分開扣過路費</span>。</li>
+          <li>單一屬性偏低時落入懲罰區間，被扣掉 <span class="hl-gold"><code>40%~60%</code></span> 基礎值；雙屬性武器等於<span class="hl-gold">被扒兩次皮</span>！</li>
+          <li>通過第一層後，才會再乘上第二層的「敵人百分比減傷率」。</li>
+        </ul>
+        <div class="visual-box">
+          <div class="visual-title">🛡️ 雙層減傷公式：為什麼「雙屬性低面板」會刮痧？</div>
+          <table class="mini-table">
+            <tr><th>武器類型</th><th>面板拆解</th><th>過第一層防禦 (120) 結果</th></tr>
+            <tr><td>複合屬性武器 (總和 <code>700</code>)</td><td>物理 <code>350</code> + 魔力 <code>350</code></td><td class="hl-rose">兩邊各自被扣 40%~60%（扒兩次皮）</td></tr>
+            <tr><td>純物理大劍 (總和 <code>550</code>)</td><td>純物理 <code>550</code></td><td class="hl-emerald">單一高數值輕鬆衝破防禦門檻（只扣一次）</td></tr>
+          </table>
+          <div class="persona-note">
+            💡 <strong>配裝提醒</strong>：推高防 Boss（如石像鬼、熔爐騎士）前，別只看面板總和數字比較大就選混傷武器，純物理單屬性往往實際打得更痛。
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="source-badges">
+          <span>知識庫溯源：</span>
+          <a class="src-badge" href="index.html#wiki-04">[WIKI-04]</a>
+          <span class="src-badge">[CARD-04]</span>
+          <a class="raw-badge" href="index.html#raw-04">[RAW-04 §4.1]</a>
+        </div>
+        <span>雙層減傷底層數學</span>
+      </div>
+    </section>
+
+    <!-- Slide 09 -->
+    <section class="slide" data-slide="9">
+      <div class="slide-header">
+        <div>
+          <span class="module-tag">MODULE 03 // 傷害數學篇 ②</span>
+          <h2 class="slide-title">動作倍率（MV）——為什麼一下重擊勝過兩下輕擊</h2>
+        </div>
+        <span class="slide-num-pill">SLIDE 09 / 12</span>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li>真正送進防禦公式的數值 = <code>武器面板攻擊力 × 招式動作倍率（Motion Value, MV）</code>。</li>
+          <li>單手輕攻擊（1H R1）的動作倍率僅為 <span class="hl-gold"><code>100%</code>（<code>1.00x</code>）</span>。</li>
+          <li>雙手蓄力重擊倍率高達 <span class="hl-gold"><code>165%~190%</code></span>；主力戰技（獅子斬、居合）高達 <span class="hl-gold"><code>210%~240%</code></span>！</li>
+          <li>單次高倍率招式能一舉衝破第一層固定防禦力門檻，兼具高實傷與高削韌！</li>
+        </ul>
+        <div class="visual-box">
+          <div class="visual-title">⚔️ 招式動作倍率（Motion Value, MV）實戰效益比</div>
+          <table class="mini-table">
+            <tr><th>出招類型</th><th>動作倍率 (MV)</th><th>破防與削韌綜合評價</th></tr>
+            <tr><td>單手輕攻擊 (1H R1)</td><td><code>100%</code> (1.00x)</td><td>易被固定防禦力吃掉傷害，削韌極低</td></tr>
+            <tr><td>雙手蓄力重擊 (Charged R2)</td><td class="hl-gold"><code>165% ~ 190%</code></td><td>單下突破防禦階梯 + 高達 <code>36~40</code> 削韌</td></tr>
+            <tr><td>主力戰技 (獅子斬 / 居合)</td><td class="hl-emerald"><code>210% ~ 240%</code></td><td>傷害直接翻倍破防 + <code>30~36</code> 削韌</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="source-badges">
+          <span>知識庫溯源：</span>
+          <a class="src-badge" href="index.html#wiki-04">[WIKI-04]</a>
+          <span class="src-badge">[CARD-04]</span>
+          <a class="raw-badge" href="index.html#raw-04">[RAW-04 §4.2]</a>
+        </div>
+        <span>高倍率招式破防原理</span>
+      </div>
+    </section>
+
+    <!-- Slide 10 -->
+    <section class="slide" data-slide="10">
+      <div class="slide-header">
+        <div>
+          <span class="module-tag">MODULE 03 // 傷害數學篇 ③</span>
+          <h2 class="slide-title">百分比扣血神器——出血與凍傷（含冰火重置）</h2>
+        </div>
+        <span class="slide-num-pill">SLIDE 10 / 12</span>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li>出血：瞬間扣 Boss <span class="hl-gold"><code>7%~10.5% + 100</code></span> 最大 HP（菁英怪 <span class="hl-gold"><code>15% + 100</code></span>），條滿歸零重算。</li>
+          <li>凍傷：扣 <span class="hl-gold"><code>7%~10% + 30</code></span> 最大 HP 並強制斷招，且 <span class="hl-gold"><code>30</code> 秒內減傷降 <code>20%</code>（傷害 <code>×1.20</code>）</span>。</li>
+          <li>冰火重置：女武神凍傷耐性 <code>306→436→636→1014</code>；用火傷摸一下可解除凍傷立即重刷。</li>
+          <li>版本修正（1.07+）：雙持跳劈 4 連擊單擊異常倍率由 <code>90%</code> 下修為 <span class="hl-gold"><code>65%</code>（共 <code>260%</code>）</span>。</li>
+        </ul>
+        <div class="visual-box">
+          <div class="visual-title">❄️🔥 出血 vs. 凍傷效益對照 &amp; 版本矛盾裁決</div>
+          <table class="mini-table">
+            <tr><th>異常類型</th><th>瞬間爆發扣血</th><th>附加戰術價值</th></tr>
+            <tr><td class="hl-rose">🩸 出血</td><td>最大 HP <code>7%~10.5% + 100</code></td><td>無冷卻期，爆發後立即歸零重刷</td></tr>
+            <tr><td class="hl-cyan">❄️ 凍傷</td><td>最大 HP <code>7%~10% + 30</code></td><td>強制大硬直斷招 + <strong>30 秒全傷 <code>×1.20</code></strong></td></tr>
+          </table>
+          <div class="persona-note">
+            ⚠️ <strong>版本矛盾裁決 #2</strong>：舊文獻常寫雙持跳劈異常倍率 <code>360%</code>，本庫依 Patch 1.07+ 最新實測統一更新為單擊 <code>65%</code>（合計 <code>260%</code>）。
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="source-badges">
+          <span>知識庫溯源：</span>
+          <a class="src-badge" href="index.html#wiki-03">[WIKI-03]</a>
+          <span class="src-badge">[CARD-03]</span>
+          <a class="raw-badge" href="index.html#raw-03">[RAW-03 §3.1~§3.3]</a>
+        </div>
+        <span>包含 Patch 1.06 vs 1.07+ 雙持異常倍率裁決</span>
+      </div>
+    </section>
+
+    <!-- Slide 11 -->
+    <section class="slide" data-slide="11">
+      <div class="slide-header">
+        <div>
+          <span class="module-tag">MODULE 04 // 配裝疊加篇</span>
+          <h2 class="slide-title">為什麼 Buff 全消失？5 大分類桶「同桶互蓋、異桶相乘」</h2>
+        </div>
+        <span class="slide-num-pill">SLIDE 11 / 12</span>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li>增益分 <span class="hl-gold">5 大桶</span>：武器、軀幹、光環、精力（各上限 <code>1</code> 個）與特殊桶（無限疊加）。</li>
+          <li>踩雷區：「煮熟螃蟹（減傷 <code>+20%</code>）」、「火焰賜力（增傷 <code>+20%</code>）」同屬<span class="hl-gold">軀幹桶</span>必互蓋！</li>
+          <li>光環桶：「黃金樹立誓」禱告版全傷 <span class="hl-gold"><code>+15%</code></span>、減傷 <span class="hl-gold"><code>+10%</code></span>（<code>80</code> 秒）；戰灰版 <span class="hl-gold"><code>+11.5%</code></span>。</li>
+          <li>異桶相乘：黃金樹立誓（<code>+15%</code>）× 火焰賜力（<code>+20%</code>）× 亞歷山大（<code>+15%</code>）= <span class="hl-gold"><code>+58.7%</code></span>！</li>
+        </ul>
+        <div class="visual-box">
+          <div class="visual-title">🧪 5 大增益分類桶（Buff Buckets）零衝突檢核表</div>
+          <table class="mini-table">
+            <tr><th>分類桶</th><th>上限</th><th>推薦代表技能</th><th>倍率貢獻</th></tr>
+            <tr><td>1. 光環桶 (Aura)</td><td>1</td><td>黃金樹立誓（禱告版 80s）</td><td class="hl-gold"><code>× 1.15</code> (+15%)</td></tr>
+            <tr><td>2. 軀幹桶 (Body)</td><td>1</td><td>火焰賜予我力量 (或螃蟹二選一)</td><td class="hl-gold"><code>× 1.20</code> (+20%)</td></tr>
+            <tr><td>3. 特殊桶 (Unique)</td><td>無限</td><td>亞歷山大碎片 + 靈藥破露滴</td><td class="hl-emerald"><code>× 1.15</code> (+15%)</td></tr>
+            <tr><td colspan="3"><strong>三桶相乘最終輸出倍率</strong></td><td class="hl-emerald"><strong><code>1.587x (+58.7%)</code></strong></td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="source-badges">
+          <span>知識庫溯源：</span>
+          <a class="src-badge" href="index.html#wiki-06">[WIKI-06]</a>
+          <span class="src-badge">[CARD-06]</span>
+          <a class="raw-badge" href="index.html#raw-06">[RAW-06 §6.1~§6.3]</a>
+        </div>
+        <span>同桶互蓋、異桶相乘</span>
+      </div>
+    </section>
+
+    <!-- Slide 12 -->
+    <section class="slide" data-slide="12">
+      <div class="slide-header">
+        <div>
+          <span class="module-tag">MODULE 04 // 實戰總結藍圖</span>
+          <h2 class="slide-title">總結實戰藍圖：新手進霧門前與戰鬥中的黃金 4 步驟 SOP</h2>
+        </div>
+        <span class="slide-num-pill">SLIDE 12 / 12</span>
+      </div>
+      <div class="slide-body">
+        <ul class="bullet-list">
+          <li>Step 1 配裝：重量壓在 <span class="hl-gold"><code>69.9%</code> 以下</span>（保住 <code>13</code> 幀無敵幀與 <code>8</code> 幀硬直），韌性湊 <span class="hl-gold"><code>51</code> 點</span>。</li>
+          <li>Step 2 上 Buff：光環桶（黃金樹立誓 <code>+15%</code>）＋ 軀幹桶（螃蟹或火焰賜力 <code>+20%</code> 擇一）。</li>
+          <li>Step 3 喝水：迎著刀刃滾進身側；等 Boss 連段後 <span class="hl-gold"><code>1.5~2.5</code> 秒收招硬直</span>再喝水（<code>52</code> 幀）。</li>
+          <li>Step 4 破防：用高倍率戰技／重擊（MV <code>165%~240%</code>、削韌 <code>30~40</code>）配凍傷與飛刀！</li>
+        </ul>
+        <div class="visual-box">
+          <div class="visual-title">🏆 家豪的結業簽核：從新手到數據流褪色者</div>
+          <div class="persona-note">
+            「（拉低連帽衛衣帽兜）恭喜你修完這門交界地底層數據課！這 12 頁的每一個數字都經過 LLM Wiki 證據卡與 Python 檢查腳本雙重驗證。現在，帶著這套 SOP 去把女武神跟惡兆打跪吧！」
+          </div>
+          <div style="display:flex;gap:10px;margin-top:6px;">
+            <a class="nav-link" href="index.html#tab-wiki" style="flex:1;text-align:center;">📖 查閱底層 LLM Wiki</a>
+            <a class="nav-link" href="index.html#tab-graph" style="flex:1;text-align:center;">🕸️ 查看 Loop/Graph 報告</a>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <div class="source-badges">
+          <span>知識庫溯源：</span>
+          <a class="src-badge" href="index.html#wiki-syn-01">[WIKI-SYN-01]</a>
+          <a class="src-badge" href="index.html#wiki-01">[WIKI-01~06]</a>
+          <a class="raw-badge" href="index.html#raw-01">[RAW-01~06]</a>
+        </div>
+        <span>🎉 全數 12 頁教學簡報展示完畢</span>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="bottombar">
+    <span style="font-size:0.82rem;color:var(--text-muted);">⌨️ 支援鍵盤左右方向鍵 <code>←</code> / <code>→</code> 或空白鍵翻頁｜每頁數據 100% 綁定 LLM Wiki 證據卡</span>
+  </footer>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll('section.slide'));
+    const total = slides.length;
+    let current = 0;
+
+    function showSlide(idx) {
+      if (idx < 0) idx = 0;
+      if (idx >= total) idx = total - 1;
+      current = idx;
+      slides.forEach((s, i) => s.classList.toggle('active', i === current));
+      document.getElementById('pageIndicator').textContent =
+        String(current + 1).padStart(2, '0') + ' / ' + String(total).padStart(2, '0');
+      document.getElementById('progressBar').style.width = ((current + 1) / total * 100).toFixed(2) + '%';
+      history.replaceState(null, '', '#slide-' + (current + 1));
+    }
+
+    function nextSlide() { showSlide(current + 1); }
+    function prevSlide() { showSlide(current - 1); }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        prevSlide();
+      }
+    });
+
+    // Hash support (#slide-5)
+    const m = location.hash.match(/#slide-(\d+)/);
+    if (m) {
+      const n = parseInt(m[1], 10) - 1;
+      if (!isNaN(n)) showSlide(n);
+    }
+  </script>
+</body>
+</html>

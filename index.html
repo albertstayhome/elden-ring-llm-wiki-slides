@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>家豪的交界地戰鬥底層機制 LLM Wiki ＆ 教學 HTML 簡報工作台</title>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --card: #131924;
+      --panel: #1a2232;
+      --gold: #d4af37;
+      --gold-soft: rgba(212, 175, 55, 0.14);
+      --cyan: #38bdf8;
+      --cyan-soft: rgba(56, 189, 248, 0.14);
+      --emerald: #34d399;
+      --rose: #fb7185;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --border: rgba(212, 175, 55, 0.28);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      padding-bottom: 60px;
+    }
+    header.hero {
+      background: radial-gradient(circle at 20% 20%, #1c263b 0%, #0b0e14 75%);
+      border-bottom: 1px solid var(--border);
+      padding: 36px 24px 28px;
+    }
+    .container {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+    .hero-badge {
+      display: inline-block;
+      font-family: Consolas, monospace;
+      font-size: 0.8rem;
+      color: var(--gold);
+      background: var(--gold-soft);
+      border: 1px solid var(--gold);
+      padding: 3px 12px;
+      border-radius: 99px;
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-size: 2rem;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    .hero-sub {
+      color: #cbd5e1;
+      max-width: 880px;
+      font-size: 0.98rem;
+      margin-bottom: 20px;
+    }
+    .cta-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 22px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #d4af37, #b48a1e);
+      color: #090d16;
+      font-weight: 800;
+      padding: 10px 20px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.95rem;
+      box-shadow: 0 6px 20px rgba(212, 175, 55, 0.3);
+    }
+    .btn-secondary {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      padding: 10px 18px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.92rem;
+      cursor: pointer;
+    }
+    .btn-secondary:hover { border-color: var(--cyan); color: var(--cyan); }
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 10px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: transparent;
+      color: var(--muted);
+      border: none;
+      border-bottom: 3px solid transparent;
+      padding: 10px 18px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      color: var(--gold);
+      border-bottom-color: var(--gold);
+    }
+    .tab-panel { display: none; padding-top: 28px; }
+    .tab-panel.active { display: block; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px 26px;
+      margin-bottom: 22px;
+    }
+    .card h2 {
+      font-size: 1.3rem;
+      color: var(--gold);
+      margin-bottom: 12px;
+      border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+      padding-bottom: 8px;
+    }
+    .card h3 {
+      font-size: 1.06rem;
+      color: var(--cyan);
+      margin: 14px 0 8px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 18px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .wiki-item {
+      background: var(--panel);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .wiki-id {
+      font-family: Consolas, monospace;
+      font-size: 0.78rem;
+      color: var(--cyan);
+      background: var(--cyan-soft);
+      padding: 2px 8px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 6px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin-top: 8px;
+    }
+    th, td {
+      padding: 9px 12px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: rgba(26, 34, 50, 0.9);
+      color: var(--gold);
+    }
+    code {
+      font-family: Consolas, monospace;
+      background: #090d14;
+      color: #fde68a;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.88em;
+    }
+    pre {
+      background: #080b10;
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      border-radius: 8px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-family: Consolas, monospace;
+      font-size: 0.84rem;
+      color: #e2e8f0;
+      line-height: 1.55;
+      margin-top: 8px;
+    }
+    .graph-flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      background: #0d121c;
+      padding: 18px;
+      border-radius: 10px;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      margin: 12px 0;
+    }
+    .g-node {
+      background: var(--panel);
+      border: 1px solid var(--cyan);
+      border-radius: 8px;
+      padding: 10px 14px;
+      min-width: 155px;
+    }
+    .g-gate {
+      background: rgba(212, 175, 55, 0.12);
+      border: 1px dashed var(--gold);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.82rem;
+      color: #fef08a;
+    }
+    .warn-box {
+      background: rgba(251, 113, 133, 0.1);
+      border-left: 4px solid var(--rose);
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin-top: 10px;
+      font-size: 0.9rem;
+    }
+    .pass-box {
+      background: rgba(52, 211, 153, 0.1);
+      border-left: 4px solid var(--emerald);
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin-top: 10px;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="hero">
+    <div class="container">
+      <span class="hero-badge">TAICA 生成式 AI 第 10 週作業 // LLM WIKI + LOOP &amp; GRAPH WORKFLOW</span>
+      <h1>家豪的交界地戰鬥底層機制 LLM Wiki ＆ 教學 HTML 簡報</h1>
+      <p class="hero-sub">
+        （推了一下黑口罩）本專案依循「先討論、後生成」原則建立 <code>AGENTS.md</code>，Ingest <strong>6 篇《艾爾登法環》底層戰鬥實測文獻</strong>至結構化 <code>wiki/</code>，並透過 <strong>5 節點有向流程（Graph）＋ 內迴圈（Loop，含把檢查往前移的程式腳本）</strong>，自動產出給新手的 12 頁互動式教學 HTML 簡報。
+      </p>
+      <div class="cta-row">
+        <a class="btn-primary" href="deck.html">🎞️ 立即開啟 12 頁教學 HTML 簡報 (deck.html)</a>
+        <button class="btn-secondary" onclick="switchTab('wiki')">📚 瀏覽 LLM Wiki 知識庫 (6 篇原始文獻 + 7 篇 Wiki)</button>
+        <button class="btn-secondary" onclick="switchTab('graph')">🕸️ 查看 Loop / Graph 流程圖與三輪檢查報告</button>
+        <a class="btn-secondary" href="https://github.com/albertstayhome/elden-ring-llm-wiki-slides" target="_blank">💻 GitHub Repository</a>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" id="btn-overview" onclick="switchTab('overview')">① 簡報與 Wiki 對照總覽</button>
+        <button class="tab-btn" id="btn-wiki" onclick="switchTab('wiki')">② LLM Wiki 知識庫瀏覽器（含 8 題訪談與矛盾裁決）</button>
+        <button class="tab-btn" id="btn-graph" onclick="switchTab('graph')">③ Loop / Graph 流程設計與提前檢查反思</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- TAB 1: OVERVIEW -->
+    <div class="tab-panel active" id="panel-overview">
+      <div class="card">
+        <h2>🎞️ 教學 HTML 簡報 (`deck.html`) 12 頁結構與 Wiki 知識庫明確對應表</h2>
+        <p style="color:var(--muted);margin-bottom:12px;">
+          點擊任一頁碼可直接跳轉至 <code>deck.html</code> 對應投影片；每頁所有數據皆由 <code>topic-elden-combat-primer/cards/</code> 證據卡嚴格綁定，零外部幻覺。
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>投影片頁碼</th>
+              <th>教學模組與標題</th>
+              <th>對應 Wiki 概念頁</th>
+              <th>對應 Ingest 原始文獻</th>
+              <th>核心教學數據（經腳本驗證）</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><a href="deck.html#slide-1" style="color:var(--cyan);">Slide 01</a></td>
+              <td>破冰：為什麼在交界地總是死得不明不白？</td>
+              <td><code>[WIKI-SYN-01]</code></td>
+              <td><code>[RAW-01]</code>, <code>[RAW-02]</code></td>
+              <td>三大痛點：<code>70.0%</code> 慢滾、<code>100%</code> 輕擊刮痧、<code>0.2s</code> 讀指令</td>
+            </tr>
+            <tr>
+              <td><a href="deck.html#slide-2" style="color:var(--cyan);">Slide 02</a></td>
+              <td>全景圖：支配交界地戰鬥的 6 大底層齒輪</td>
+              <td><code>[WIKI-01]~[WIKI-06]</code></td>
+              <td><code>[RAW-01]~[RAW-06]</code></td>
+              <td>防守生存 → 進攻破防 → 傷害數學 → 配裝疊加四階段地圖</td>
+            </tr>
+            <tr>
+              <td><a href="deck.html#slide-3" style="color:var(--cyan);">Slide 03</a></td>
+              <td>防守篇 ①：翻滾不是逃跑，是 13 幀無敵護盾</td>
+              <td><code>[WIKI-02]</code></td>
+              <td><code>[RAW-02 §2.1]</code></td>
+              <td>60 FPS 下輕/中負荷 <code>13</code> 幀無敵幀（<code>0.216s</code>）+ <code>8</code> 幀硬直</td>
+            </tr>
+            <tr>
+              <td><a href="deck.html#slide-4" style="color:var(--cyan);">Slide 04</a></td>
+              <td>防守篇 ②：70% 負重紅線與重負荷慢滾懲罰</td>
+              <td><code>[WIKI-02]</code></td>
+              <td><code>[RAW-02 §2.2, §2.3]</code></td>
+              <td>重負荷（<code>≥70%</code>）硬直暴增至 <code>16</code> 幀、耗精 <code>+20%</code>；獵犬步伐 <code>18</code> 幀</td>
+            </tr>
+            <tr>
+              <td><a href="deck.html#slide-5" style="color:var(--cyan);">Slide 05</a></td>
+              <td>防守篇 ③：破解 Boss「0.2 秒讀指令」喝水法則</td>
+              <td><code>[WIKI-05]</code></td>
+              <td><code>[RAW-05 §5.1, §5.2]</code></td>
+              <td><code>8~20m</code> 中立待機 <code>0.2s (12幀)</code> 懲罰；等 <code>1.5~2.5s</code> 收招再喝水（<code>52幀</code>）</td>
+            </tr>
+            <tr>
+              <td><a href="deck.html#slide-6" style="color:var(--cyan);">Slide 06</a></td>
+              <td>破防篇 ①：看不見的第二條血條——失衡值</td>
+              <td><code>[WIKI-01]</code></td>
+              <td><code>[RAW-01 §1.1, §1.3]</code></td>
+              <td>Boss 失衡 <code>80 / 120 / 150</code> 點；獅子斬 <code>36</code> 點、月隱重擊 <code>30</code> 點</td>
+            </tr>
+            <tr>
+              <td><a href="deck.html#slide-7" style="color:var(--cyan);">Slide 07</a></td>
+              <td>破防篇 ②：5 秒歸零倒數與飛刀續命術</td>
+              <td><code>[WIKI-01]</code></td>
+              <td><code>[RAW-01 §1.2, §1.3]</code></td>
+              <td><code>5.0s / 6.0s</code> 未受擊每秒扣 <code>13</code> 點；飛刀 <code>1</code> 點重置；玩家 <code>51 / 101</code> 韌性</td>
+            </tr>
+            <tr>
+              <td><a href="deck.html#slide-8" style="color:var(--cyan);">Slide 08</a></td>
+              <td>傷害篇 ①：面板 700 輸給 550？雙層減傷懲罰</td>
+              <td><code>[WIKI-04]</code></td>
+              <td><code>[RAW-04 §4.1]</code></td>
+              <td>第一層固定防禦力（<code>120</code>）對雙屬性分開扣減 <code>40%~60%</code>（扒兩次皮）</td>
+            </tr>
+            <tr>
+              <td><a href="deck.html#slide-9" style="color:var(--cyan);">Slide 09</a></td>
+              <td>傷害篇 ②：動作倍率（MV）突破防禦門檻</td>
+              <td><code>[WIKI-04]</code></td>
+              <td><code>[RAW-04 §4.2]</code></td>
+              <td>單手輕擊 MV <code>100%</code> vs 蓄力重擊 <code>165%~190%</code> vs 戰技 <code>210%~240%</code></td>
+            </tr>
+            <tr>
+              <td><a href="deck.html#slide-10" style="color:var(--cyan);">Slide 10</a></td>
+              <td>傷害篇 ③：出血與凍傷百分比數學（含冰火重置）</td>
+              <td><code>[WIKI-03]</code></td>
+              <td><code>[RAW-03 §3.1~§3.3]</code></td>
+              <td>出血 <code>10.5%+100</code>；凍傷 <code>10%+30</code> 且 <code>30s</code> 增傷 <code>+20%</code>；雙持倍率修正為 <code>65%</code></td>
+            </tr>
+            <tr>
+              <td><a href="deck.html#slide-11" style="color:var(--cyan);">Slide 11</a></td>
+              <td>配裝篇：5 大增益分類桶「同桶互蓋、異桶相乘」</td>
+              <td><code>[WIKI-06]</code></td>
+              <td><code>[RAW-06 §6.1~§6.3]</code></td>
+              <td>螃蟹與火焰賜力同屬軀幹桶互斥；三桶相乘 <code>1.15×1.20×1.15 = +58.7%</code></td>
+            </tr>
+            <tr>
+              <td><a href="deck.html#slide-12" style="color:var(--cyan);">Slide 12</a></td>
+              <td>總結藍圖：新手進霧門前與實戰黃金 4 步驟 SOP</td>
+              <td><code>[WIKI-SYN-01]</code></td>
+              <td><code>[RAW-01]~[RAW-06]</code></td>
+              <td><code>&lt;70%</code> 負重 + <code>51</code> 韌性 → 異桶 Buff → 收招喝水 → 高 MV 戰技破防</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 2: LLM WIKI BROWSER -->
+    <div class="tab-panel" id="panel-wiki">
+      <div class="card">
+        <h2>📋 步驟一：「先討論、後生成」8 題需求訪談紀錄 (`wiki/interview_spec.md`)</h2>
+        <p style="color:var(--muted);margin-bottom:10px;">
+          在建立任何檔案前，先由 Coding Agent 針對課堂第 32 頁列出的 8 大維度進行需求訪談，確認後才生成 <code>AGENTS.md</code> 與資料夾：
+        </p>
+        <table>
+          <thead>
+            <tr><th>維度</th><th>訪談問題</th><th>老闆（林鑫吾／家豪）定案規格</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>👥 <strong>讀者是誰</strong></td><td>Wiki 與簡報的目標讀者是誰？</td><td>Wiki 供 AI 作為嚴謹事實庫；HTML 簡報面向<strong>完全不懂魂系術語的新手玩家</strong>（白話比喻＋精確數據）。</td></tr>
+            <tr><td>📑 <strong>頁面類型</strong></td><td>需要哪些結構化頁面？</td><td><code>index.md</code>（總索引）、<code>log.md</code>（異動與矛盾紀錄）、<code>concepts/*.md</code>（6 篇概念頁）、<code>synthesis/*.md</code>（綜合頁）。</td></tr>
+            <tr><td>🌏 <strong>使用語言</strong></td><td>語言與術語規範？</td><td>繁體中文為主，關鍵底層機制保留英文對照（Stance, Poise, i-Frames, Motion Value）。</td></tr>
+            <tr><td>🔖 <strong>出處細度</strong></td><td>引用來源要多細？</td><td>強制雙層溯源：Wiki 標註 <code>[RAW-0X §章節]</code>，簡報每頁底部標註 <code>[WIKI-0X]</code> 與 <code>[RAW-0X]</code>。</td></tr>
+            <tr><td>⚖ <strong>矛盾處理</strong></td><td>不同版本數據矛盾怎麼辦？</td><td>嚴禁 AI 腦補折衷！以最新 Patch 1.10+ 為準，並設立 <code>[!WARNING] 版本數據矛盾與裁決</code> 區塊同時記錄舊版與新版。</td></tr>
+            <tr><td>📥 <strong>Ingest 方式</strong></td><td>一次一篇還是批次？</td><td>分兩批 Ingest：先 Ingest 前 2 篇並 <code>git commit -m "first ingest"</code>，再批次 Ingest 後 4 篇（共 6 篇）。</td></tr>
+            <tr><td>🎞 <strong>下游產出</strong></td><td>之後要產出什麼？</td><td>透過 <code>/topic-slides</code> Graph 工作流產出 12 頁互動式教學 HTML 簡報（<code>deck.html</code>）。</td></tr>
+            <tr><td>🩺 <strong>Lint 檢查</strong></td><td>腳本要自動檢查什麼？</td><td><code>lint_wiki.py</code> 查文獻數 ≥ 5、斷鏈、孤兒頁、矛盾標記；<code>check_drafts.py</code> 與 <code>check_slides.py</code> 查字數溢出與數據忠實度。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>📚 已 Ingest 之 6 篇原始文獻 (`raw/`) 與編譯後之 7 篇 Wiki 知識頁 (`wiki/`)</h2>
+        <div class="grid-2">
+          <div class="wiki-item" id="wiki-01">
+            <span class="wiki-id">[WIKI-01] ← [RAW-01]</span>
+            <h3>失衡值（Stance）與韌性（Poise）機制</h3>
+            <p>涵蓋 Boss 隱藏失衡槽（瑪蓮妮亞/瑪爾基特 <code>80</code>、拉塔恩 <code>120</code>、艾爾登之獸 <code>150</code>）、<code>5.0s</code> 恢復計時與飛刀 <code>1</code> 點續命技巧、獅子斬 <code>36</code> 點削韌。</p>
+            <div class="warn-box">
+              <strong>⚖ 版本矛盾裁決 #1</strong>：統合 Patch 1.07 與 Patch 1.10+ 差異，確立 PvE 被動抗單發輕擊門檻為 <strong><code>51</code> 點韌性</strong>（重擊為 <code>101</code> 點）。
+            </div>
+          </div>
+          <div class="wiki-item" id="wiki-02">
+            <span class="wiki-id">[WIKI-02] ← [RAW-02]</span>
+            <h3>翻滾無敵幀（i-Frames）與負重比率門檻</h3>
+            <p>60 FPS 逐幀拆解：輕/中負荷（<code>&lt;70%</code>）皆享 <code>13</code> 幀無敵幀 + <code>8</code> 幀硬直；跨過 <code>70.0%</code> 重負荷紅線後無敵幀降至 <code>12</code> 幀、硬直暴增至 <code>16</code> 幀、耗精 <code>+20%</code>。獵犬步伐則為 <code>18</code> 幀無敵幀。</p>
+          </div>
+          <div class="wiki-item" id="wiki-03">
+            <span class="wiki-id">[WIKI-03] ← [RAW-03]</span>
+            <h3>出血與凍傷異常狀態數學模型</h3>
+            <p>出血瞬間扣血 <code>7%~10.5% + 100</code>；凍傷瞬間扣血 <code>7%~10% + 30</code> 強制斷招，並附加 <code>30</code> 秒全減傷 <code>-20%</code>（傷害 <code>×1.20</code>），支援火焰攻擊重置凍傷。</p>
+            <div class="warn-box">
+              <strong>⚖ 版本矛盾裁決 #2</strong>：釐清雙持跳劈 4 連擊異常倍率由 Patch 1.06 前的 <code>90% (共360%)</code> 於 Patch 1.07+ 下修為 <strong><code>65% (共260%)</code></strong>。
+            </div>
+          </div>
+          <div class="wiki-item" id="wiki-04">
+            <span class="wiki-id">[WIKI-04] ← [RAW-04]</span>
+            <h3>動作倍率（MV）與雙層減傷公式</h3>
+            <p>解釋為何雙屬性面板 <code>700</code>（物理 <code>350</code>+魔力 <code>350</code>）實戰輸給純物理 <code>550</code>：第一層固定防禦力（<code>120</code>）對各屬性分別扣減 <code>40%~60%</code>。對比輕擊 MV <code>100%</code> 與戰技 <code>210%~240%</code>。</p>
+          </div>
+          <div class="wiki-item" id="wiki-05">
+            <span class="wiki-id">[WIKI-05] ← [RAW-05]</span>
+            <h3>Boss 讀指令（Input Reading）與喝水視窗</h3>
+            <p>揭露 Boss 在 <code>8~20m</code> 中立待機時，會於玩家按下喝水第 <code>1</code> 幀後的 <code>0.2s (12幀)</code> 內發動懲罰。喝水需 <code>52</code> 幀（<code>0.87s</code>），必須卡在 Boss 連段後 <code>1.5~2.5s</code> 收招硬直喝。</p>
+          </div>
+          <div class="wiki-item" id="wiki-06">
+            <span class="wiki-id">[WIKI-06] ← [RAW-06]</span>
+            <h3>五大增益分類桶（Buff Buckets）疊加規則</h3>
+            <p>歸納「武器、軀幹、光環、精力、特殊」5 大分類桶。破解「吃螃蟹又放火焰賜力」同桶互蓋誤區，示範異桶相乘 <code>1.15 × 1.20 × 1.15 = +58.7%</code>。</p>
+          </div>
+          <div class="wiki-item" id="wiki-syn-01">
+            <span class="wiki-id">[WIKI-SYN-01] 跨文獻綜合應用頁</span>
+            <h3>交界地新手生存與輸出最佳化全流程藍圖</h3>
+            <p>跨篇整合 <code>[WIKI-01]</code>～<code>[WIKI-06]</code>，將無敵幀、失衡續命、雙層減傷、凍傷增傷與 Buff 分類桶收斂為新手進霧門前與實戰黃金 4 步驟 SOP。</p>
+          </div>
+        </div>
+
+        <h3 style="margin-top:18px;">📄 原始文獻層（<code>raw/</code> 共 6 篇不可變事實來源錨點索引）</h3>
+        <table>
+          <thead>
+            <tr><th>編號</th><th>檔案路徑</th><th>核心實測數據內容</th></tr>
+          </thead>
+          <tbody>
+            <tr id="raw-01"><td><code>[RAW-01]</code></td><td><code>raw/01_stance_and_poise_frames.md</code></td><td>Boss 80/120/150 失衡值、5.0s 恢復倒數、飛刀 1 點續命、Patch 1.10+ 玩家 51/101 韌性門檻</td></tr>
+            <tr id="raw-02"><td><code>[RAW-02]</code></td><td><code>raw/02_dodge_roll_iframes_equip_load.md</code></td><td>60 FPS 下輕/中負荷 13 幀無敵幀（佔比 61.9%）+ 8 幀硬直；重負荷（≥70%）12 幀 + 16 幀硬直</td></tr>
+            <tr id="raw-03"><td><code>[RAW-03]</code></td><td><code>raw/03_status_effects_hemorrhage_frostbite.md</code></td><td>出血 10.5%+100；凍傷 10%+30 + 30 秒減傷 -20% + 冰火重置；Patch 1.07+ 雙持異常倍率下修為 65%</td></tr>
+            <tr id="raw-04"><td><code>[RAW-04]</code></td><td><code>raw/04_damage_negation_and_motion_values.md</code></td><td>第一層固定防禦力（120）對複合屬性雙重扣減 40%~60%；動作倍率 MV（輕擊 100% vs 戰技 210%~240%）</td></tr>
+            <tr id="raw-05"><td><code>[RAW-05]</code></td><td><code>raw/05_boss_input_reading_and_aggro.md</code></td><td>8~20m 中立待機下偵測喝水第 1 幀並於 0.2s（12 幀）懲罰；喝水 52 幀，應卡 1.5~2.5s 收招硬直</td></tr>
+            <tr id="raw-06"><td><code>[RAW-06]</code></td><td><code>raw/06_ash_of_war_buff_stacking_rules.md</code></td><td>武器、軀幹、光環、精力、特殊共 5 大分類桶；同桶互蓋（螃蟹 vs 火焰賜力）、異桶相乘（+58.7%）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>💡 課堂思考：上週「一句話生成」vs. 這週「討論後生成」的 <code>AGENTS.md</code> 差在哪裡？</h2>
+        <table>
+          <thead>
+            <tr><th>比較面向</th><th>上週：一句話直接生成 <code>AGENTS.md</code></th><th>這週：先訪談 8 題確認需求後才生成 <code>AGENTS.md</code></th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>受眾與教學轉譯</strong></td><td>AI 自己猜讀者，常直接照抄硬核數據，新手根本看不懂。</td><td>明確定義「Wiki 存嚴謹數據、簡報給魂系零基礎新手」，強制每頁先給一句話白話比喻。</td></tr>
+            <tr><td><strong>文獻矛盾處理</strong></td><td>遇到不同版本數據衝突時，AI 容易自行平均或隨便挑一個。</td><td>制定明確<strong>改版衝突處理規則</strong>：以最新 1.10+ 為準，並強制以 <code>[!WARNING]</code> 並陳新舊版。</td></tr>
+            <tr><td><strong>字數與架構邊界</strong></td><td>把所有規則塞進單一檔案，易突破 Antigravity <code>12,000</code> 字元上限。</td><td><code>AGENTS.md</code> 精簡至 <code>3,759</code> 字元，將 Loop/Graph 規格拆至 <code>SKILL.md</code> 與 <code>.agents/workflows/</code>。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 3: LOOP / GRAPH & REFLECTION -->
+    <div class="tab-panel" id="panel-graph">
+      <div class="card">
+        <h2>🕸️ 步驟三：Loop / Graph 雙層工作流架構設計</h2>
+        <p>
+          我們採用課堂第 43–47 頁的 <strong>「外層有向圖（Graph）控制階段與退回路線 ＋ 內層小圈迴圈（Inner Loop）局部修正」</strong> 設計，所有中間狀態皆落地為實體檔案（<code>topic-elden-combat-primer/</code>）：
+        </p>
+        <div class="graph-flow">
+          <div class="g-node"><strong>Node 1：檢索 Wiki</strong><br><small>產出 <code>sources.md</code></small></div>
+          <span>➔</span>
+          <div class="g-gate">🛡️ <strong>覆蓋率關卡</strong><br><small>&lt;3 篇立即停止</small></div>
+          <span>➔</span>
+          <div class="g-node"><strong>Node 2：平行證據卡</strong><br><small>產出 <code>cards/card_01~06</code></small></div>
+          <span>➔</span>
+          <div class="g-node"><strong>Node 3：12 頁大綱</strong><br><small>產出 <code>outline.md</code></small></div>
+          <span>➔</span>
+          <div class="g-node" style="border-color:var(--gold);"><strong>Node 4：逐頁稿 (小圈 Loop)</strong><br><small>產出 <code>drafts/*.md</code></small></div>
+          <span>➔</span>
+          <div class="g-gate">🧪 <strong>把檢查往前移</strong><br><small><code>check_drafts.py</code></small></div>
+          <span>➔</span>
+          <div class="g-node"><strong>Node 5：渲染 HTML</strong><br><small>產出 <code>deck.html</code></small></div>
+          <span>➔</span>
+          <div class="g-gate">✅ <strong>最終渲染檢查</strong><br><small><code>check_slides.py</code></small></div>
+        </div>
+
+        <h3>各節點權限隔離表（「每一關只能看什麼、不能做什麼」）</h3>
+        <table>
+          <thead>
+            <tr><th>節點</th><th>只能讀取（Input）</th><th>產出狀態檔（Output）</th><th>嚴格禁止行為</th><th>出錯退回路線（Loop / Edge）</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Node 1 檢索</strong></td><td><code>wiki/index.md</code></td><td><code>sources.md</code></td><td>不可遺漏相關概念頁</td><td>少於 3 篇直接觸發停止剎車</td></tr>
+            <tr><td><strong>Node 2 證據卡</strong></td><td>單一篇 <code>wiki/concepts/*.md</code></td><td><code>cards/card_0X.md</code></td><td>嚴禁混入其他篇或外部知識</td><td>缺漏數字退回重抽該張證據卡</td></tr>
+            <tr><td><strong>Node 3 大綱</strong></td><td><code>sources.md</code> + <code>cards/</code></td><td><code>outline.md</code></td><td>不可跳過新手白話破冰頁</td><td>缺子題退回 Node 1；結構不順重排大綱</td></tr>
+            <tr><td><strong>Node 4 逐頁稿</strong></td><td><code>outline.md</code> + 對應 <code>cards/</code></td><td><code>drafts/slides_draft.md</code></td><td>單頁不得超過 5 點 / 210 字；不可無出處</td><td><strong>小圈 Loop</strong>：<code>check_drafts.py</code> 抓錯後<strong>只修出錯那頁</strong>（最多 2 輪）</td></tr>
+            <tr><td><strong>Node 5 渲染 HTML</strong></td><td>已通過檢查之逐頁稿</td><td><code>deck.html</code> + <code>report.md</code></td><td><strong>排版時嚴禁順手修改任何一個字或數字！</strong></td><td>若 DOM 溢出退回 Node 4 縮短文字，不可硬塞</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>🔄 步驟四：實際執行紀錄與流程反思（哪一關最常出錯？如何把檢查往前移？）</h2>
+        <div class="warn-box">
+          <strong>🔴 第 1 輪失敗紀錄（在最後一關才檢查 → 觸發昂貴的「大圈退回」）</strong><br>
+          最初設計時，我們只在最後 <code>Node 5 (渲染 HTML)</code> 完成後才跑檢查，結果同時爆發幾個問題：<br>
+          1. <strong>錯置舊版數據＋版面溢出</strong>：<code>Slide 04</code> 初稿誤將獵犬步伐寫成舊版流傳的 <code>22</code> 幀無敵（Patch 1.06+ 實為 <code>18</code> 幀），且 <code>Slide 05（破解 Boss 讀指令）</code> 把所有條件塞成一段 <code>272</code> 字長文，渲染後直接超出卡片高度。<br>
+          2. <strong>漏標出處＋結論講反</strong>：<code>Slide 08（雙層減傷）</code> 初稿漏標 <code>[WIKI-04]</code>，且把「雙屬性武器被扒兩次皮」講反成「只扣一次過路費更划算」。<br>
+          因為 <code>Node 5</code> 規定「排版時不能改字」，導致被迫從最後一關<strong>大圈退回 <code>Node 4 (逐頁稿)</code> 重新改稿再重跑渲染</strong>！
+        </div>
+
+        <div class="pass-box">
+          <strong>🟢 反思與修改流程（把檢查往前移：字數與數值核對移到 Node 4 逐頁稿）</strong><br>
+          呼應課堂核心原則：<strong>「好的 Graph：大圈很少轉，小圈轉得很快。錯誤要在離源頭最近的地方被抓到。」</strong><br>
+          我們修改了流程，在 <code>Node 4 (逐頁稿)</code> 內部新增了 <strong><code>scripts/check_drafts.py</code> 前置關卡</strong>，並搭配「另開全新對話視窗做 AI 審查」：在純文字階段就強制檢查「每頁 ≤ 5 點、正文 ≤ 210 字、必備 <code>[WIKI-XX]</code> 出處、數值核對與因果邏輯」。<br>
+          修改後，第 2 輪在 <code>Node 4</code> 小圈 Loop 內花 0.1 秒就抓出並局部修好 <code>Slide 04</code>、<code>Slide 05</code>（縮減為 4 點共 172 字）與 <code>Slide 08</code>，送入 <code>Node 5</code> 渲染 <code>deck.html</code> 時<strong>一次全數通過（0 大圈退回）</strong>！
+        </div>
+
+        <h3>💻 驗證腳本實際執行輸出紀錄</h3>
+        <pre id="scriptLog">$ python scripts/lint_wiki.py
+[PASS] Wiki Lint 全數通過！6 篇原始文獻、7 篇 Wiki 頁面、0 孤兒頁、0 斷鏈。
+
+$ python scripts/check_drafts.py topic-elden-combat-primer/drafts/slides_draft_v1_failed.md
+[FAIL] slides_draft_v1_failed.md 程式檢查未通過（共發現 3 項違規）：
+  ❌ Slide 04 (防守篇 ②：70% 負重紅線——別讓「重負荷慢滾」害死你)：[幻覺數字攔截] 發現未存在於 cards/ 證據卡的數字：['22']
+  ❌ Slide 05 (防守篇 ③：破解 Boss「0.2 秒讀指令」的安全喝水法則)：[字數溢出風險] 正文字數 272 字 &gt; 210 字上限
+  ❌ Slide 08 (傷害篇 ①：面板 700 輸給 550？雙層減傷與複合屬性懲罰)：[缺出處] 未標註有效的 [WIKI-XX] 或 [RAW-0X] 來源標籤
+（註：同時透過另開新對話做 🧑‍⚖️ AI 審查，抓出 Slide 08 將「雙屬性被扒兩次皮」結論講反！）
+
+$ python scripts/check_drafts.py topic-elden-combat-primer/drafts/slides_draft_v2_passed.md
+[PASS] slides_draft_v2_passed.md 全數通過逐頁稿程式檢查（12 頁、100% 出處、0 溢出、100% 數值經證據卡核對）！
+
+$ python scripts/check_slides.py
+[PASS] deck.html 通過全部 5 大項渲染、零竄改與溯源檢查！（12 頁、0 溢出、100% 忠於逐頁稿與 Wiki）</pre>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    function switchTab(name) {
+      ['overview', 'wiki', 'graph'].forEach(t => {
+        document.getElementById('btn-' + t).classList.toggle('active', t === name);
+        document.getElementById('panel-' + t).classList.toggle('active', t === name);
+      });
+    }
+    if (location.hash === '#tab-wiki' || location.hash.startsWith('#wiki-') || location.hash.startsWith('#raw-')) {
+      switchTab('wiki');
+    } else if (location.hash === '#tab-graph') {
+      switchTab('graph');
+    }
+  </script>
+</body>
+</html>
